@@ -173,9 +173,13 @@ exports.handler = async (event, context) => {
   try {
     // Parse path: /api/neurofinder/{datasetId}/{endpoint}
     // Netlify redirects /api/neurofinder/* to /.netlify/functions/neurofinder/:splat
-    // So event.path will be like: /.netlify/functions/neurofinder/00.00/status
-    // Or event.path could be: /api/neurofinder/00.00/status (if called directly)
-    let path = event.path;
+    // The :splat parameter can be in event.path or event.queryStringParameters.splat
+    let path = event.path || '';
+    
+    // Check for splat in query parameters (from redirect)
+    if (event.queryStringParameters && event.queryStringParameters.splat) {
+      path = '/' + event.queryStringParameters.splat;
+    }
     
     // Remove function path prefix if present
     if (path.startsWith('/.netlify/functions/neurofinder')) {
