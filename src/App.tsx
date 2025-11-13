@@ -197,12 +197,21 @@ function App() {
                 <p className="text-amber-200 text-sm mb-2" style={{ fontFamily: 'Bebas Neue, sans-serif', letterSpacing: '0.05em' }}>
                   <strong>QUICK FIX:</strong>
                 </p>
-                <ol className="text-amber-200 text-sm list-decimal list-inside space-y-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>
-                  <li>Make sure the proxy server is running: <code className="bg-amber-900/60 px-2 py-1 rounded text-amber-100">npm run proxy</code></li>
-                  <li>Check that it's running on <code className="bg-amber-900/60 px-2 py-1 rounded text-amber-100">http://localhost:3001</code></li>
-                  <li>If the dataset is already pre-loaded, the proxy will use cached files</li>
-                  <li>See README.md for detailed setup instructions</li>
-                </ol>
+                {import.meta.env.PROD ? (
+                  <ol className="text-amber-200 text-sm list-decimal list-inside space-y-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                    <li>Large datasets may take time to download and process</li>
+                    <li>Try refreshing the page and selecting the dataset again</li>
+                    <li>If the issue persists, the dataset service may be temporarily unavailable</li>
+                    <li>See README.md for more information</li>
+                  </ol>
+                ) : (
+                  <ol className="text-amber-200 text-sm list-decimal list-inside space-y-1" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                    <li>Make sure the proxy server is running: <code className="bg-amber-900/60 px-2 py-1 rounded text-amber-100">npm run proxy</code></li>
+                    <li>Check that it's running on <code className="bg-amber-900/60 px-2 py-1 rounded text-amber-100">http://localhost:3001</code></li>
+                    <li>If the dataset is already pre-loaded, the proxy will use cached files</li>
+                    <li>See README.md for detailed setup instructions</li>
+                  </ol>
+                )}
               </div>
             </div>
           )}

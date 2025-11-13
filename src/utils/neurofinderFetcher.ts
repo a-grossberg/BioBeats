@@ -6,7 +6,10 @@
 
 import { TIFFFrame, loadTIFFFile } from './tiffLoader';
 
-const PROXY_BASE_URL = '/api/neurofinder'; // For local proxy server
+// Use Netlify Functions in production, local proxy in development
+const PROXY_BASE_URL = import.meta.env.PROD 
+  ? '/api/neurofinder'  // Netlify redirects this to /.netlify/functions/neurofinder
+  : '/api/neurofinder'; // Local dev uses Vite proxy to localhost:3001
 
 /**
  * Fetch dataset using proxy (recommended)
@@ -30,14 +33,27 @@ export async function fetchDatasetViaProxy(
       clearTimeout(timeoutId);
       
       if (!statusCheck.ok && statusCheck.status !== 404) {
-        throw new Error('Proxy server is not responding. Make sure it is running on port 3001.');
+        // On Netlify, this means the function might be having issues
+        if (import.meta.env.PROD) {
+          throw new Error('Dataset service is not available. Please try again in a moment.');
+        } else {
+          throw new Error('Proxy server is not responding. Make sure it is running on port 3001.');
+        }
       }
     } catch (fetchError) {
       if (fetchError instanceof Error && (fetchError.name === 'AbortError' || fetchError.message.includes('aborted'))) {
-        throw new Error('Proxy server timeout. Make sure the proxy is running: `npm run proxy`');
+        if (import.meta.env.PROD) {
+          throw new Error('Dataset service timeout. Large datasets may take longer to process. Please try again.');
+        } else {
+          throw new Error('Proxy server timeout. Make sure the proxy is running: `npm run proxy`');
+        }
       }
       if (fetchError instanceof TypeError) {
-        throw new Error('Cannot connect to proxy server. Make sure it is running: `npm run proxy`');
+        if (import.meta.env.PROD) {
+          throw new Error('Cannot connect to dataset service. Please refresh and try again.');
+        } else {
+          throw new Error('Cannot connect to proxy server. Make sure it is running: `npm run proxy`');
+        }
       }
       throw fetchError;
     }
