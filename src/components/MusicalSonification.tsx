@@ -557,11 +557,21 @@ const MusicalSonification = ({ dataset, shouldPause = 0 }: MusicalSonificationPr
     });
     instrumentsRef.current.clear();
 
-    // Create gain node
+    // Create gain node with volume scaling based on cluster count
+    // More clusters = lower volume per cluster to prevent overwhelming sound
+    const clusterVolumeScale = Math.max(0.3, 1.0 / Math.sqrt(clusters.length));
+    const scaledVolume = volume * clusterVolumeScale;
+    
     if (gainNodeRef.current) {
       gainNodeRef.current.dispose();
     }
-    gainNodeRef.current = new Tone.Gain(volume).toDestination();
+    if (limiterRef.current) {
+      limiterRef.current.dispose();
+    }
+    
+    // Add a limiter to prevent clipping and harsh sounds
+    limiterRef.current = new Tone.Limiter(-6).toDestination();
+    gainNodeRef.current = new Tone.Gain(scaledVolume).connect(limiterRef.current);
 
     // Create instrument for each cluster with effects
     clusters.forEach((cluster, idx) => {
@@ -637,15 +647,19 @@ const MusicalSonification = ({ dataset, shouldPause = 0 }: MusicalSonificationPr
       if (gainNodeRef.current) {
         gainNodeRef.current.dispose();
       }
+      if (limiterRef.current) {
+        limiterRef.current.dispose();
+      }
     };
   }, [clusters, volume]);
 
-  // Update master volume
+  // Update master volume with cluster-based scaling
   useEffect(() => {
-    if (gainNodeRef.current) {
-      gainNodeRef.current.gain.value = volume;
+    if (gainNodeRef.current && clusters.length > 0) {
+      const clusterVolumeScale = Math.max(0.3, 1.0 / Math.sqrt(clusters.length));
+      gainNodeRef.current.gain.value = volume * clusterVolumeScale;
     }
-  }, [volume]);
+  }, [volume, clusters.length]);
 
   // Update tempo ref when tempo changes
   useEffect(() => {
@@ -768,8 +782,11 @@ const MusicalSonification = ({ dataset, shouldPause = 0 }: MusicalSonificationPr
           try {
             // Map each active neuron to a note based on its intensity and position
             // This creates a direct mapping from data to music
+            // Limit simultaneous notes per cluster based on total cluster count
+            // More clusters = fewer notes per cluster to prevent overwhelming sound
+            const maxNotesPerCluster = clusters.length > 4 ? 3 : 5;
             const notesToPlay = neuronsToPlay
-              .slice(0, Math.min(5, neuronsToPlay.length)) // Limit to 5 simultaneous notes
+              .slice(0, Math.min(maxNotesPerCluster, neuronsToPlay.length))
               .map((neuron, noteIdx) => {
                 // Map intensity (0-1) to scale degree (0-6)
                 const scaleDegree = Math.floor(neuron.intensity * 7) % 7;
@@ -782,8 +799,12 @@ const MusicalSonification = ({ dataset, shouldPause = 0 }: MusicalSonificationPr
                 // Get frequency from scale
                 const frequency = getNoteFrequency(finalDegree, octave, MAJOR_SCALE);
                 
-                // Volume directly from intensity (preserves dynamics)
-                const volume = Tone.gainToDb(Math.max(0.1, Math.min(1, neuron.intensity * 0.8)));
+                // Volume directly from intensity, but scaled down based on cluster count
+                // More clusters = lower volume per note to prevent overwhelming sound
+                const baseVolume = neuron.intensity * 0.8;
+                const clusterScale = Math.max(0.4, 1.0 / Math.sqrt(clusters.length));
+                const scaledBaseVolume = baseVolume * clusterScale;
+                const volume = Tone.gainToDb(Math.max(0.1, Math.min(1, scaledBaseVolume)));
                 
                 // Duration based on intensity (stronger signals last longer)
                 const duration = neuron.intensity > 0.5 ? '8n' : '16n';
