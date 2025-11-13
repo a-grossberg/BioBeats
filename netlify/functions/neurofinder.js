@@ -173,8 +173,8 @@ exports.handler = async (event, context) => {
   try {
     // Parse path: /api/neurofinder/{datasetId}/{endpoint}
     // Netlify redirects /api/neurofinder/* to /.netlify/functions/neurofinder/:splat
-    // The :splat parameter can be in event.path or event.queryStringParameters.splat
-    let path = event.path || '';
+    // Try multiple ways to get the path
+    let path = event.path || event.rawPath || '';
     
     // Check for splat in query parameters (from redirect)
     if (event.queryStringParameters && event.queryStringParameters.splat) {
@@ -192,6 +192,17 @@ exports.handler = async (event, context) => {
     path = path.replace(/^\/+/, '');
     
     const parts = path.split('/').filter(p => p);
+    
+    // Debug logging (only in dev)
+    if (process.env.NETLIFY_DEV) {
+      console.log('Function event:', {
+        path: event.path,
+        rawPath: event.rawPath,
+        queryString: event.queryStringParameters,
+        parsedPath: path,
+        parts: parts
+      });
+    }
     
     if (parts.length < 1) {
       return {
