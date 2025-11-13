@@ -32,6 +32,8 @@ export async function fetchDatasetViaProxy(
       
       const statusCheck = await fetch(`${PROXY_BASE_URL}/${datasetId}/status`, { 
         signal: controller.signal,
+        method: 'GET',
+        mode: 'cors',
         headers: {
           'Accept': 'application/json',
         }
@@ -70,7 +72,13 @@ export async function fetchDatasetViaProxy(
 
     // Trigger the download/extraction by requesting info
     // This will start the process if not already started
-    const infoResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/info.json`);
+    const infoResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/info.json`, {
+      method: 'GET',
+      mode: 'cors',
+      headers: {
+        'Accept': 'application/json',
+      }
+    });
     if (!infoResponse.ok) {
       const errorText = await infoResponse.text();
       let errorMessage = 'Dataset not found or proxy not available';
