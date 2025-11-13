@@ -851,8 +851,9 @@ const MusicalSonification = ({ dataset, shouldPause = 0 }: MusicalSonificationPr
               const timeSinceLastPlay = currentTime - lastPlay;
               
               // Only play if enough time has passed (prevents overwhelming)
-              // But allow simultaneous notes from same cluster if they're close in time
-              if (timeSinceLastPlay >= 0.05 || noteIdx === 0) {
+              // Increase delay between notes when there are many clusters
+              const minDelay = clusters.length > 4 ? 0.1 : 0.05;
+              if (timeSinceLastPlay >= minDelay || noteIdx === 0) {
                 if (noteIdx === 0) {
                   lastPlayTimeRef.current.set(cluster.id, currentTime);
                 }
