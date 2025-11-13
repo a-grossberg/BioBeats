@@ -493,6 +493,7 @@ const MusicalSonification = ({ dataset, shouldPause = 0 }: MusicalSonificationPr
   const timeoutRef = useRef<number | null>(null);
   const gainNodeRef = useRef<Tone.Gain | null>(null);
   const limiterRef = useRef<Tone.Limiter | null>(null);
+  const compressorRef = useRef<Tone.Compressor | null>(null);
   const isPlayingRef = useRef(false);
   const currentFrameRef = useRef(0);
   const loopRunningRef = useRef(false);
@@ -560,7 +561,10 @@ const MusicalSonification = ({ dataset, shouldPause = 0 }: MusicalSonificationPr
 
     // Create gain node with volume scaling based on cluster count
     // More clusters = lower volume per cluster to prevent overwhelming sound
-    const clusterVolumeScale = Math.max(0.3, 1.0 / Math.sqrt(clusters.length));
+    // Use more aggressive scaling for 5+ clusters
+    const clusterVolumeScale = clusters.length > 4 
+      ? Math.max(0.2, 0.5 / clusters.length)  // More aggressive for 5+ clusters
+      : Math.max(0.4, 1.0 / Math.sqrt(clusters.length));  // Less aggressive for 4 or fewer
     const scaledVolume = volume * clusterVolumeScale;
     
     if (gainNodeRef.current) {
@@ -569,10 +573,25 @@ const MusicalSonification = ({ dataset, shouldPause = 0 }: MusicalSonificationPr
     if (limiterRef.current) {
       limiterRef.current.dispose();
     }
+    if (compressorRef.current) {
+      compressorRef.current.dispose();
+    }
     
-    // Add a limiter to prevent clipping and harsh sounds
-    limiterRef.current = new Tone.Limiter(-6).toDestination();
-    gainNodeRef.current = new Tone.Gain(scaledVolume).connect(limiterRef.current);
+    // Add compressor to smooth dynamics and reduce harsh peaks
+    compressorRef.current = new Tone.Compressor({
+      threshold: -24,
+      ratio: 4,
+      attack: 0.003,
+      release: 0.1
+    });
+    
+    // Add a limiter to prevent clipping and harsh sounds (more aggressive threshold)
+    limiterRef.current = new Tone.Limiter(-12).toDestination();
+    
+    // Chain: gain -> compressor -> limiter -> destination
+    gainNodeRef.current = new Tone.Gain(scaledVolume);
+    gainNodeRef.current.connect(compressorRef.current);
+    compressorRef.current.connect(limiterRef.current);
 
     // Create instrument for each cluster with effects
     clusters.forEach((cluster, idx) => {
@@ -651,13 +670,18 @@ const MusicalSonification = ({ dataset, shouldPause = 0 }: MusicalSonificationPr
       if (limiterRef.current) {
         limiterRef.current.dispose();
       }
+      if (compressorRef.current) {
+        compressorRef.current.dispose();
+      }
     };
   }, [clusters, volume]);
 
   // Update master volume with cluster-based scaling
   useEffect(() => {
     if (gainNodeRef.current && clusters.length > 0) {
-      const clusterVolumeScale = Math.max(0.3, 1.0 / Math.sqrt(clusters.length));
+      const clusterVolumeScale = clusters.length > 4 
+        ? Math.max(0.2, 0.5 / clusters.length)  // More aggressive for 5+ clusters
+        : Math.max(0.4, 1.0 / Math.sqrt(clusters.length));  // Less aggressive for 4 or fewer
       gainNodeRef.current.gain.value = volume * clusterVolumeScale;
     }
   }, [volume, clusters.length]);
@@ -785,7 +809,7 @@ const MusicalSonification = ({ dataset, shouldPause = 0 }: MusicalSonificationPr
             // This creates a direct mapping from data to music
             // Limit simultaneous notes per cluster based on total cluster count
             // More clusters = fewer notes per cluster to prevent overwhelming sound
-            const maxNotesPerCluster = clusters.length > 4 ? 3 : 5;
+            const maxNotesPerCluster = clusters.length > 4 ? 2 : clusters.length > 6 ? 1 : 5;
             const notesToPlay = neuronsToPlay
               .slice(0, Math.min(maxNotesPerCluster, neuronsToPlay.length))
               .map((neuron, noteIdx) => {
@@ -802,10 +826,12 @@ const MusicalSonification = ({ dataset, shouldPause = 0 }: MusicalSonificationPr
                 
                 // Volume directly from intensity, but scaled down based on cluster count
                 // More clusters = lower volume per note to prevent overwhelming sound
-                const baseVolume = neuron.intensity * 0.8;
-                const clusterScale = Math.max(0.4, 1.0 / Math.sqrt(clusters.length));
+                const baseVolume = neuron.intensity * 0.6; // Reduced from 0.8
+                const clusterScale = clusters.length > 4
+                  ? Math.max(0.3, 0.4 / clusters.length)  // More aggressive for 5+ clusters
+                  : Math.max(0.5, 1.0 / Math.sqrt(clusters.length));  // Less aggressive for 4 or fewer
                 const scaledBaseVolume = baseVolume * clusterScale;
-                const volume = Tone.gainToDb(Math.max(0.1, Math.min(1, scaledBaseVolume)));
+                const volume = Tone.gainToDb(Math.max(0.05, Math.min(0.8, scaledBaseVolume))); // Cap at 0.8 instead of 1.0
                 
                 // Duration based on intensity (stronger signals last longer)
                 const duration = neuron.intensity > 0.5 ? '8n' : '16n';
