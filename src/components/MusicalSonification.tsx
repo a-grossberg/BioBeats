@@ -492,6 +492,7 @@ const MusicalSonification = ({ dataset, shouldPause = 0 }: MusicalSonificationPr
   const clustersRef = useRef<Cluster[]>([]);
   const timeoutRef = useRef<number | null>(null);
   const gainNodeRef = useRef<Tone.Gain | null>(null);
+  const limiterRef = useRef<Tone.Limiter | null>(null);
   const isPlayingRef = useRef(false);
   const currentFrameRef = useRef(0);
   const loopRunningRef = useRef(false);
