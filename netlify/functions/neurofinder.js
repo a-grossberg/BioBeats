@@ -172,14 +172,28 @@ exports.handler = async (event, context) => {
 
   try {
     // Parse path: /api/neurofinder/{datasetId}/{endpoint}
-    const path = event.path.replace('/.netlify/functions/neurofinder', '');
+    // Netlify redirects /api/neurofinder/* to /.netlify/functions/neurofinder/:splat
+    // So event.path will be like: /.netlify/functions/neurofinder/00.00/status
+    // Or event.path could be: /api/neurofinder/00.00/status (if called directly)
+    let path = event.path;
+    
+    // Remove function path prefix if present
+    if (path.startsWith('/.netlify/functions/neurofinder')) {
+      path = path.replace('/.netlify/functions/neurofinder', '');
+    } else if (path.startsWith('/api/neurofinder')) {
+      path = path.replace('/api/neurofinder', '');
+    }
+    
+    // Remove leading slash
+    path = path.replace(/^\/+/, '');
+    
     const parts = path.split('/').filter(p => p);
     
     if (parts.length < 1) {
       return {
         statusCode: 400,
         headers,
-        body: JSON.stringify({ error: 'Dataset ID required' })
+        body: JSON.stringify({ error: 'Dataset ID required', receivedPath: event.path, parsedPath: path })
       };
     }
 
@@ -204,7 +218,13 @@ exports.handler = async (event, context) => {
       return {
         statusCode: 404,
         headers,
-        body: JSON.stringify({ error: 'Endpoint not found', path: endpoint })
+        body: JSON.stringify({ 
+          error: 'Endpoint not found', 
+          endpoint: endpoint,
+          originalPath: event.path,
+          parsedPath: path,
+          parts: parts
+        })
       };
     }
 
