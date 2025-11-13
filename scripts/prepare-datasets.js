@@ -4,8 +4,14 @@
  * This script downloads datasets, processes them into JSON format,
  * and prepares them for hosting on GitHub Pages.
  * 
- * Run with: node scripts/prepare-datasets.js [dataset-id]
- * Or run without args to process all datasets
+ * Usage:
+ *   node scripts/prepare-datasets.js                    # Process all 19 datasets, sample 100 frames each
+ *   node scripts/prepare-datasets.js 00.00 00.01       # Process specific datasets
+ *   node scripts/prepare-datasets.js --frames=500      # Process all datasets, sample 500 frames each
+ *   node scripts/prepare-datasets.js --all-frames       # Process all datasets, copy ALL frames (WARNING: very large!)
+ * 
+ * Note: GitHub has a 100MB file size limit. Storing all frames from all 19 datasets
+ * could result in a 1-4GB repository. Use --frames=N to limit frame count.
  */
 
 const https = require('https');

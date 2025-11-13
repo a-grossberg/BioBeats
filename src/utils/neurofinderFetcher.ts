@@ -6,7 +6,7 @@
 
 import { TIFFFrame, loadTIFFFile } from './tiffLoader';
 
-// S3 bucket base URL for Neurofinder datasets
+// S3 bucket base URL for Neurofinder datasets (ZIP files only)
 const NEUROFINDER_S3_BASE = 'https://s3.amazonaws.com/neuro.datasets/challenges/neurofinder';
 
 // Free CORS proxy (fallback if direct S3 access fails)
@@ -365,142 +365,115 @@ async function getDatasetInfo(datasetId: string): Promise<{ frameCount: number; 
 }
 
 /**
- * Fetch a frame from S3, trying direct access first, then CORS proxy
- */
-async function fetchFrameFromS3(datasetId: string, filename: string): Promise<Blob | null> {
-  // Try multiple S3 URL patterns
-  const s3UrlPatterns = [
-    `${NEUROFINDER_S3_BASE}/neurofinder.${datasetId}/images/${filename}`,
-    `${NEUROFINDER_S3_BASE}/${datasetId}/images/${filename}`,
-    `${NEUROFINDER_S3_BASE}/neurofinder.${datasetId}/${filename}`,
-  ];
-  
-  // Try direct S3 access first
-  for (const s3Url of s3UrlPatterns) {
-    try {
-      const response = await fetch(s3Url, { mode: 'cors' });
-      if (response.ok) {
-        return await response.blob();
-      }
-    } catch (e) {
-      // CORS error or not found, try next pattern
-      continue;
-    }
-  }
-  
-  // If direct access fails, try with CORS proxy
-  for (const s3Url of s3UrlPatterns) {
-    try {
-      const proxyUrl = `${CORS_PROXY}${encodeURIComponent(s3Url)}`;
-      const response = await fetch(proxyUrl);
-      if (response.ok) {
-        return await response.blob();
-      }
-    } catch (e) {
-      continue;
-    }
-  }
-  
-  return null;
-}
-
-/**
- * Fetch dataset directly from S3 (streaming, no download needed)
+ * Fetch and extract dataset ZIP from S3 (client-side extraction)
+ * This downloads the ZIP once and extracts it in the browser
  */
 export async function fetchDatasetFromS3(
   datasetId: string,
   onProgress?: (progress: number, message: string) => void
 ): Promise<{ frames: TIFFFrame[]; regions?: any }> {
-  onProgress?.(0, 'Loading dataset from S3...');
+  onProgress?.(0, 'Downloading dataset ZIP from S3...');
   
   try {
-    // Get dataset info
-    onProgress?.(5, 'Getting dataset information...');
+    // Dynamic import of JSZip (only load when needed)
+    const JSZip = (await import('jszip')).default;
+    
+    // Get dataset info for frame count
     const datasetInfo = await getDatasetInfo(datasetId);
-    const { frameCount, frameFilenames, regions } = datasetInfo;
+    const { frameCount, regions } = datasetInfo;
     
-    onProgress?.(10, `Found ${frameCount} frames. Loading from S3...`);
+    // Download ZIP file from S3
+    const zipUrl = `${NEUROFINDER_S3_BASE}/neurofinder.${datasetId}.zip`;
+    onProgress?.(10, 'Downloading ZIP file (this may take a few minutes)...');
     
-    // Try to find the correct filename pattern by testing a few frames
-    let workingPattern: string | null = null;
-    const testFrames = [0, Math.floor(frameCount / 2), frameCount - 1];
-    
-    for (const frameIdx of testFrames) {
-      for (let patternOffset = 0; patternOffset < 4; patternOffset++) {
-        const filenameIdx = frameIdx * 4 + patternOffset;
-        if (filenameIdx < frameFilenames.length) {
-          const testFilename = frameFilenames[filenameIdx];
-          const blob = await fetchFrameFromS3(datasetId, testFilename);
-          if (blob) {
-            workingPattern = testFilename.replace(/\d+/, '{}');
-            break;
-          }
-        }
+    let zipBlob: Blob;
+    try {
+      // Try direct S3 access first
+      const response = await fetch(zipUrl, { mode: 'cors' });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
       }
-      if (workingPattern) break;
-    }
-    
-    if (!workingPattern) {
-      // Fallback: try common patterns
-      const commonPatterns = ['000.tif', '000000.tif', 'image00000.tif'];
-      for (const pattern of commonPatterns) {
-        const testBlob = await fetchFrameFromS3(datasetId, pattern);
-        if (testBlob) {
-          workingPattern = pattern;
-          break;
-        }
+      zipBlob = await response.blob();
+    } catch (directError) {
+      // Fallback to CORS proxy
+      onProgress?.(15, 'Using CORS proxy for download...');
+      const proxyUrl = `${CORS_PROXY}${encodeURIComponent(zipUrl)}`;
+      const proxyResponse = await fetch(proxyUrl);
+      if (!proxyResponse.ok) {
+        throw new Error(`Failed to download ZIP: ${proxyResponse.status}`);
       }
+      zipBlob = await proxyResponse.blob();
     }
     
-    if (!workingPattern) {
-      throw new Error('Could not determine frame filename pattern. S3 bucket may not be publicly accessible.');
+    onProgress?.(30, 'Extracting ZIP file in browser...');
+    
+    // Extract ZIP in browser
+    const zip = await JSZip.loadAsync(zipBlob);
+    
+    // Find images directory in ZIP
+    const imageEntries: { name: string; entry: any }[] = [];
+    zip.forEach((relativePath, file) => {
+      if (relativePath.includes('/images/') && (relativePath.endsWith('.tif') || relativePath.endsWith('.tiff'))) {
+        imageEntries.push({ name: relativePath, entry: file });
+      }
+    });
+    
+    // Sort by filename
+    imageEntries.sort((a, b) => a.name.localeCompare(b.name));
+    
+    if (imageEntries.length === 0) {
+      throw new Error('No image files found in ZIP');
     }
     
-    // Generate all frame filenames based on working pattern
-    const basePattern = workingPattern.replace('{}', '');
-    const digits = basePattern.match(/\d+/)?.[0]?.length || 3;
-    const actualFilenames: string[] = [];
-    
-    for (let i = 0; i < frameCount; i++) {
-      const padded = i.toString().padStart(digits, '0');
-      actualFilenames.push(basePattern.replace(/\d+/, padded));
-    }
+    onProgress?.(40, `Found ${imageEntries.length} frames. Loading...`);
     
     // Load all frames
     const frames: TIFFFrame[] = [];
+    const totalFrames = imageEntries.length;
     
-    for (let i = 0; i < frameCount; i++) {
-      const progress = 10 + Math.floor((i / frameCount) * 85);
-      if (i % 10 === 0 || i < 5) {
-        onProgress?.(progress, `Loading frame ${i + 1}/${frameCount} from S3...`);
+    for (let i = 0; i < totalFrames; i++) {
+      const progress = 40 + Math.floor((i / totalFrames) * 55);
+      if (i % 50 === 0 || i < 5) {
+        onProgress?.(progress, `Loading frame ${i + 1}/${totalFrames}...`);
       }
       
-      const filename = actualFilenames[i];
-      const blob = await fetchFrameFromS3(datasetId, filename);
-      
-      if (blob) {
-        try {
-          const file = new File([blob], filename, { type: 'image/tiff' });
-          const frame = await loadTIFFFile(file);
-          if (frame) {
-            frame.frameIndex = i;
-            frames.push(frame);
-          }
-        } catch (frameError) {
-          console.warn(`Failed to parse frame ${i}:`, frameError);
+      try {
+        const { name, entry } = imageEntries[i];
+        const fileBlob = await entry.async('blob');
+        const filename = name.split('/').pop() || `frame_${i}.tif`;
+        const file = new File([fileBlob], filename, { type: 'image/tiff' });
+        const frame = await loadTIFFFile(file);
+        
+        if (frame) {
+          frame.frameIndex = i;
+          frames.push(frame);
         }
+      } catch (frameError) {
+        console.warn(`Failed to load frame ${i}:`, frameError);
       }
     }
     
+    // Try to find regions.json in ZIP
+    let regionsData = regions || null;
+    try {
+      const regionsEntry = zip.file(/regions\.json$/i)[0];
+      if (regionsEntry) {
+        const regionsText = await regionsEntry.async('string');
+        regionsData = JSON.parse(regionsText);
+      }
+    } catch (e) {
+      // Regions not found, use existing or null
+    }
+    
     if (frames.length === 0) {
-      throw new Error('No frames could be loaded from S3');
+      throw new Error('No frames could be extracted from ZIP');
     }
     
     onProgress?.(95, 'Dataset loaded successfully!');
     
     return {
       frames,
-      regions: regions || null
+      regions: regionsData
     };
   } catch (error) {
     throw new Error(`Failed to load dataset from S3: ${error instanceof Error ? error.message : 'Unknown error'}`);
