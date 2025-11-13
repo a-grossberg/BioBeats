@@ -24,12 +24,17 @@ export async function fetchDatasetViaProxy(
 
   try {
     // First, check if proxy is available with timeout
+    // Render free tier can have 30+ second cold starts, so use longer timeout
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
+      const timeoutDuration = import.meta.env.VITE_PROXY_URL ? 45000 : 2000; // 45s for Render, 2s for local
+      const timeoutId = setTimeout(() => controller.abort(), timeoutDuration);
       
       const statusCheck = await fetch(`${PROXY_BASE_URL}/${datasetId}/status`, { 
-        signal: controller.signal
+        signal: controller.signal,
+        headers: {
+          'Accept': 'application/json',
+        }
       });
       clearTimeout(timeoutId);
       
@@ -43,14 +48,18 @@ export async function fetchDatasetViaProxy(
       }
     } catch (fetchError) {
       if (fetchError instanceof Error && (fetchError.name === 'AbortError' || fetchError.message.includes('aborted'))) {
-        if (import.meta.env.PROD) {
+        if (import.meta.env.VITE_PROXY_URL) {
+          throw new Error('Render service is starting up (cold start). This can take 30-50 seconds on the free tier. Please wait and try again.');
+        } else if (import.meta.env.PROD) {
           throw new Error('Dataset service timeout. Large datasets may take longer to process. Please try again.');
         } else {
           throw new Error('Proxy server timeout. Make sure the proxy is running: `npm run proxy`');
         }
       }
       if (fetchError instanceof TypeError) {
-        if (import.meta.env.PROD) {
+        if (import.meta.env.VITE_PROXY_URL) {
+          throw new Error('Cannot connect to Render service. It may be spinning up (free tier cold start takes 30-50 seconds). Please wait and refresh.');
+        } else if (import.meta.env.PROD) {
           throw new Error('Cannot connect to dataset service. Please refresh and try again.');
         } else {
           throw new Error('Cannot connect to proxy server. Make sure it is running: `npm run proxy`');
