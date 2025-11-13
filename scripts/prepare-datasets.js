@@ -49,7 +49,7 @@ function downloadFile(url, dest) {
 /**
  * Process dataset: extract and convert to JSON
  */
-async function processDataset(datasetId) {
+async function processDataset(datasetId, maxFrames = 100) {
   console.log(`\nProcessing dataset: ${datasetId}`);
   
   const zipPath = path.join(DATASETS_DIR, `${datasetId}.zip`);
@@ -152,31 +152,72 @@ async function processDataset(datasetId) {
     mkdirSync(publicImagesPath, { recursive: true });
     
     console.log(`  Copying images to public directory...`);
-    // Copy first 100 frames as a sample (to keep repo size manageable)
-    const sampleSize = Math.min(100, files.length);
-    for (let i = 0; i < sampleSize; i++) {
+    // Copy frames (sample or all based on maxFrames parameter)
+    const framesToCopy = maxFrames === Infinity ? files.length : Math.min(maxFrames, files.length);
+    
+    for (let i = 0; i < framesToCopy; i++) {
       const src = path.join(imagesPath, files[i]);
       const dest = path.join(publicImagesPath, files[i]);
       fs.copyFileSync(src, dest);
     }
-    console.log(`  ✓ Copied ${sampleSize} sample frames`);
+    console.log(`  ✓ Copied ${framesToCopy} ${maxFrames === Infinity ? 'frames (all)' : 'sample frames'}`);
   }
 }
+
+// All 19 available datasets
+const ALL_DATASETS = [
+  '00.00', '00.01', '00.02', '00.03', '00.04', '00.05', '00.06', '00.07', '00.08', '00.09', '00.10', '00.11',
+  '01.00', '01.01',
+  '02.00', '02.01',
+  '03.00',
+  '04.00', '04.01'
+];
 
 // Main
 async function main() {
   const args = process.argv.slice(2);
-  const datasets = args.length > 0 
-    ? args 
-    : ['00.00', '00.01', '00.02', '01.00', '02.00']; // Process a few key datasets
+  
+  // Parse arguments
+  let datasets = ALL_DATASETS; // Default: process all 19 datasets
+  let maxFrames = 100; // Default: sample 100 frames per dataset
+  
+  // Check for --all-frames flag
+  const allFramesIndex = args.indexOf('--all-frames');
+  if (allFramesIndex !== -1) {
+    maxFrames = Infinity; // Copy all frames
+    args.splice(allFramesIndex, 1);
+  }
+  
+  // Check for --frames=N flag
+  const framesMatch = args.find(arg => arg.startsWith('--frames='));
+  if (framesMatch) {
+    maxFrames = parseInt(framesMatch.split('=')[1], 10) || 100;
+    args = args.filter(arg => !arg.startsWith('--frames='));
+  }
+  
+  // If specific datasets provided, use those; otherwise use all
+  if (args.length > 0) {
+    datasets = args;
+  }
   
   console.log(`Preparing ${datasets.length} dataset(s) for GitHub Pages...`);
+  if (maxFrames === Infinity) {
+    console.log('⚠️  WARNING: Copying ALL frames - this will create a very large repository!');
+    console.log('   Estimated size: 1-4 GB. GitHub recommends keeping repos under 1 GB.');
+  } else {
+    console.log(`   Sampling ${maxFrames} frames per dataset to keep repo size manageable.`);
+  }
+  console.log('');
   
   for (const datasetId of datasets) {
-    await processDataset(datasetId);
+    await processDataset(datasetId, maxFrames);
   }
   
   console.log('\n✓ Done!');
+  if (maxFrames !== Infinity) {
+    console.log(`\nNote: Only ${maxFrames} frames per dataset were copied.`);
+    console.log('To copy all frames, run with --all-frames flag (warning: very large repo size).');
+  }
 }
 
 main().catch(console.error);
