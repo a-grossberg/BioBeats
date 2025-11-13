@@ -27,9 +27,17 @@ try {
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Enable CORS
-app.use(cors());
+// Enable CORS with explicit configuration
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Accept'],
+  credentials: false
+}));
 app.use(express.json());
+
+// Handle preflight requests explicitly
+app.options('*', cors());
 
 // Cache directory for downloaded datasets
 const CACHE_DIR = join(__dirname, '../data/cache');
