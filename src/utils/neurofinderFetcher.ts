@@ -99,7 +99,13 @@ export async function fetchDatasetViaProxy(
     while (!ready && attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms between checks
       
-      const statusResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/status`);
+      const statusResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/status`, {
+        method: 'GET',
+        mode: 'cors',
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
       if (statusResponse.ok) {
         const status = await statusResponse.json();
         
@@ -122,7 +128,13 @@ export async function fetchDatasetViaProxy(
     }
 
     // Now fetch the actual info
-    const finalInfoResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/info.json`);
+    const finalInfoResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/info.json`, {
+      method: 'GET',
+      mode: 'cors',
+      headers: {
+        'Accept': 'application/json',
+      }
+    });
     const info = await finalInfoResponse.json();
     const frameCount = info.frameCount || 100; // Default estimate
 
@@ -138,7 +150,13 @@ export async function fetchDatasetViaProxy(
         // Try server-side processing first
         let useServerSideProcessing = true;
         try {
-          const testResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/frames/0/processed.json`);
+          const testResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/frames/0/processed.json`, {
+            method: 'GET',
+            mode: 'cors',
+            headers: {
+              'Accept': 'application/json',
+            }
+          });
           if (!testResponse.ok) {
             useServerSideProcessing = false;
             console.log('Server-side processing not available, falling back to client-side');
@@ -155,7 +173,13 @@ export async function fetchDatasetViaProxy(
             for (let j = 0; j < batchSize && (i + j) < maxFramesToLoad; j++) {
               const frameNum = i + j;
               batch.push(
-                fetch(`${PROXY_BASE_URL}/${datasetId}/frames/${frameNum}/processed.json`)
+                fetch(`${PROXY_BASE_URL}/${datasetId}/frames/${frameNum}/processed.json`, {
+                  method: 'GET',
+                  mode: 'cors',
+                  headers: {
+                    'Accept': 'application/json',
+                  }
+                })
                   .then(res => {
                     if (!res.ok) throw new Error(`Failed to fetch frame ${frameNum}: ${res.statusText}`);
                     return res.json();
@@ -205,7 +229,10 @@ export async function fetchDatasetViaProxy(
               // Try each naming pattern
               const fetchPromises = framePatterns.map(pattern => {
                 const filename = pattern(frameNum);
-                return fetch(`${PROXY_BASE_URL}/${datasetId}/images/${filename}`)
+                return fetch(`${PROXY_BASE_URL}/${datasetId}/images/${filename}`, {
+                  method: 'GET',
+                  mode: 'cors',
+                })
                   .then(res => {
                     if (res.ok) return res.blob();
                     return null; // Try next pattern
@@ -269,7 +296,13 @@ export async function fetchDatasetViaProxy(
     // Fetch regions if available
     let regions = null;
     try {
-      const regionsResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/regions.json`);
+      const regionsResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/regions.json`, {
+        method: 'GET',
+        mode: 'cors',
+        headers: {
+          'Accept': 'application/json',
+        }
+      });
       if (regionsResponse.ok) {
         regions = await regionsResponse.json();
       }
