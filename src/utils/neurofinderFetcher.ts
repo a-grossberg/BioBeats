@@ -6,14 +6,17 @@
 
 import { TIFFFrame, loadTIFFFile } from './tiffLoader';
 
-// Use GitHub Pages for datasets (free hosting)
-// In production, fetch from GitHub Pages. In dev, can use local proxy or GitHub Pages
+// S3 bucket base URL for Neurofinder datasets
+const NEUROFINDER_S3_BASE = 'https://s3.amazonaws.com/neuro.datasets/challenges/neurofinder';
+
+// Free CORS proxy (fallback if direct S3 access fails)
+const CORS_PROXY = 'https://corsproxy.io/?';
+
+// Use GitHub Pages for manifest/metadata only
 const getBaseUrl = () => {
   if (import.meta.env.PROD) {
-    // GitHub Pages base path
     return '/BioBeats';
   }
-  // For local dev, try GitHub Pages first, fallback to proxy
   return '';
 };
 
@@ -317,69 +320,190 @@ function extractFrameNumber(filename: string): number {
 }
 
 /**
- * Fetch dataset from GitHub Pages
+ * Fetch dataset info/manifest (from GitHub Pages or generate from dataset metadata)
  */
-export async function fetchDatasetFromGitHubPages(
+async function getDatasetInfo(datasetId: string): Promise<{ frameCount: number; frameFilenames: string[]; regions?: any }> {
+  // Try to load manifest from GitHub Pages first
+  try {
+    const manifestUrl = `${DATASETS_BASE_URL}/${datasetId}.json`;
+    const manifestResponse = await fetch(manifestUrl);
+    if (manifestResponse.ok) {
+      const manifest = await manifestResponse.json();
+      return {
+        frameCount: manifest.frameCount,
+        frameFilenames: manifest.frames?.map((f: any) => f.filename) || [],
+        regions: manifest.regions
+      };
+    }
+  } catch (e) {
+    // Manifest not available, will generate from dataset metadata
+  }
+  
+  // Fallback: use dataset metadata to generate frame filenames
+  const { AVAILABLE_DATASETS } = await import('./datasetLoader');
+  const dataset = AVAILABLE_DATASETS.find(d => d.id === datasetId);
+  if (!dataset) {
+    throw new Error(`Dataset ${datasetId} not found`);
+  }
+  
+  const frameCount = dataset.frameCount || 2000;
+  // Generate frame filenames - common patterns: 000.tif, 000000.tif, image00000.tiff
+  const frameFilenames: string[] = [];
+  const digits = frameCount.toString().length;
+  const padding = Math.max(3, digits);
+  
+  for (let i = 0; i < frameCount; i++) {
+    // Try common naming patterns
+    const padded = i.toString().padStart(padding, '0');
+    frameFilenames.push(`${padded}.tif`);
+    frameFilenames.push(`${padded}.tiff`);
+    frameFilenames.push(`image${padded}.tif`);
+    frameFilenames.push(`image${padded}.tiff`);
+  }
+  
+  return { frameCount, frameFilenames };
+}
+
+/**
+ * Fetch a frame from S3, trying direct access first, then CORS proxy
+ */
+async function fetchFrameFromS3(datasetId: string, filename: string): Promise<Blob | null> {
+  // Try multiple S3 URL patterns
+  const s3UrlPatterns = [
+    `${NEUROFINDER_S3_BASE}/neurofinder.${datasetId}/images/${filename}`,
+    `${NEUROFINDER_S3_BASE}/${datasetId}/images/${filename}`,
+    `${NEUROFINDER_S3_BASE}/neurofinder.${datasetId}/${filename}`,
+  ];
+  
+  // Try direct S3 access first
+  for (const s3Url of s3UrlPatterns) {
+    try {
+      const response = await fetch(s3Url, { mode: 'cors' });
+      if (response.ok) {
+        return await response.blob();
+      }
+    } catch (e) {
+      // CORS error or not found, try next pattern
+      continue;
+    }
+  }
+  
+  // If direct access fails, try with CORS proxy
+  for (const s3Url of s3UrlPatterns) {
+    try {
+      const proxyUrl = `${CORS_PROXY}${encodeURIComponent(s3Url)}`;
+      const response = await fetch(proxyUrl);
+      if (response.ok) {
+        return await response.blob();
+      }
+    } catch (e) {
+      continue;
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Fetch dataset directly from S3 (streaming, no download needed)
+ */
+export async function fetchDatasetFromS3(
   datasetId: string,
   onProgress?: (progress: number, message: string) => void
 ): Promise<{ frames: TIFFFrame[]; regions?: any }> {
-  onProgress?.(0, 'Loading dataset from GitHub Pages...');
+  onProgress?.(0, 'Loading dataset from S3...');
   
   try {
-    // Load manifest
-    const manifestUrl = `${DATASETS_BASE_URL}/${datasetId}.json`;
-    onProgress?.(10, 'Fetching dataset manifest...');
+    // Get dataset info
+    onProgress?.(5, 'Getting dataset information...');
+    const datasetInfo = await getDatasetInfo(datasetId);
+    const { frameCount, frameFilenames, regions } = datasetInfo;
     
-    const manifestResponse = await fetch(manifestUrl);
-    if (!manifestResponse.ok) {
-      throw new Error(`Dataset manifest not found: ${datasetId}`);
+    onProgress?.(10, `Found ${frameCount} frames. Loading from S3...`);
+    
+    // Try to find the correct filename pattern by testing a few frames
+    let workingPattern: string | null = null;
+    const testFrames = [0, Math.floor(frameCount / 2), frameCount - 1];
+    
+    for (const frameIdx of testFrames) {
+      for (let patternOffset = 0; patternOffset < 4; patternOffset++) {
+        const filenameIdx = frameIdx * 4 + patternOffset;
+        if (filenameIdx < frameFilenames.length) {
+          const testFilename = frameFilenames[filenameIdx];
+          const blob = await fetchFrameFromS3(datasetId, testFilename);
+          if (blob) {
+            workingPattern = testFilename.replace(/\d+/, '{}');
+            break;
+          }
+        }
+      }
+      if (workingPattern) break;
     }
     
-    const manifest = await manifestResponse.json();
-    onProgress?.(20, `Found ${manifest.frameCount} frames`);
+    if (!workingPattern) {
+      // Fallback: try common patterns
+      const commonPatterns = ['000.tif', '000000.tif', 'image00000.tif'];
+      for (const pattern of commonPatterns) {
+        const testBlob = await fetchFrameFromS3(datasetId, pattern);
+        if (testBlob) {
+          workingPattern = pattern;
+          break;
+        }
+      }
+    }
     
-    // Load frames (limit to available frames)
+    if (!workingPattern) {
+      throw new Error('Could not determine frame filename pattern. S3 bucket may not be publicly accessible.');
+    }
+    
+    // Generate all frame filenames based on working pattern
+    const basePattern = workingPattern.replace('{}', '');
+    const digits = basePattern.match(/\d+/)?.[0]?.length || 3;
+    const actualFilenames: string[] = [];
+    
+    for (let i = 0; i < frameCount; i++) {
+      const padded = i.toString().padStart(digits, '0');
+      actualFilenames.push(basePattern.replace(/\d+/, padded));
+    }
+    
+    // Load all frames
     const frames: TIFFFrame[] = [];
-    const framesToLoad = manifest.frames || [];
-    const totalFrames = framesToLoad.length;
     
-    for (let i = 0; i < totalFrames; i++) {
-      const frameInfo = framesToLoad[i];
-      const progress = 20 + Math.floor((i / totalFrames) * 70);
-      onProgress?.(progress, `Loading frame ${i + 1}/${totalFrames}...`);
+    for (let i = 0; i < frameCount; i++) {
+      const progress = 10 + Math.floor((i / frameCount) * 85);
+      if (i % 10 === 0 || i < 5) {
+        onProgress?.(progress, `Loading frame ${i + 1}/${frameCount} from S3...`);
+      }
       
-      try {
-        const imageUrl = `${DATASETS_BASE_URL}/${datasetId}/images/${frameInfo.filename}`;
-        const imageResponse = await fetch(imageUrl);
-        
-        if (imageResponse.ok) {
-          const blob = await imageResponse.blob();
-          const file = new File([blob], frameInfo.filename, { type: 'image/tiff' });
+      const filename = actualFilenames[i];
+      const blob = await fetchFrameFromS3(datasetId, filename);
+      
+      if (blob) {
+        try {
+          const file = new File([blob], filename, { type: 'image/tiff' });
           const frame = await loadTIFFFile(file);
-          
           if (frame) {
             frame.frameIndex = i;
             frames.push(frame);
           }
+        } catch (frameError) {
+          console.warn(`Failed to parse frame ${i}:`, frameError);
         }
-      } catch (frameError) {
-        console.warn(`Failed to load frame ${i}:`, frameError);
-        // Continue loading other frames
       }
     }
     
     if (frames.length === 0) {
-      throw new Error('No frames could be loaded from GitHub Pages');
+      throw new Error('No frames could be loaded from S3');
     }
     
     onProgress?.(95, 'Dataset loaded successfully!');
     
     return {
       frames,
-      regions: manifest.regions || null
+      regions: regions || null
     };
   } catch (error) {
-    throw new Error(`Failed to load dataset from GitHub Pages: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    throw new Error(`Failed to load dataset from S3: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 }
 
@@ -390,20 +514,23 @@ export async function fetchDataset(
   datasetId: string,
   onProgress?: (progress: number, message: string) => void
 ): Promise<{ frames: TIFFFrame[]; regions?: any }> {
-  // Try GitHub Pages first (free hosting)
+  // Try direct S3 access first (streaming, no download needed)
   try {
-    return await fetchDatasetFromGitHubPages(datasetId, onProgress);
-  } catch (githubError) {
-    console.warn('GitHub Pages fetch failed, trying proxy...', githubError);
+    return await fetchDatasetFromS3(datasetId, onProgress);
+  } catch (s3Error) {
+    console.warn('Direct S3 fetch failed, trying proxy...', s3Error);
     // Fallback to proxy if available (for local dev)
     try {
       return await fetchDatasetViaProxy(datasetId, onProgress);
     } catch (proxyError) {
       throw new Error(
-        `Failed to load dataset. Please ensure:\n` +
-        `1. Dataset files are available at ${DATASETS_BASE_URL}/${datasetId}.json\n` +
-        `2. Or a proxy server is running\n\n` +
-        `Error: ${githubError instanceof Error ? githubError.message : 'Unknown error'}`
+        `Failed to load dataset. Tried:\n` +
+        `1. Direct S3 access (with CORS proxy fallback)\n` +
+        `2. Local proxy server\n\n` +
+        `Error: ${s3Error instanceof Error ? s3Error.message : 'Unknown error'}\n\n` +
+        `Make sure:\n` +
+        `- S3 bucket is publicly accessible, or\n` +
+        `- A proxy server is running: npm run proxy`
       );
     }
   }
