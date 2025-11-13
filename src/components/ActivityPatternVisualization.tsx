@@ -178,7 +178,7 @@ const ActivityPatternVisualization = memo(function ActivityPatternVisualization(
         {/* Activity heatmap */}
         <div className="bg-black/50 rounded-lg p-4 overflow-x-auto">
           <div className="space-y-2 min-w-[600px]">
-            {activityPatterns.map((pattern, idx) => {
+            {activityPatterns.map((pattern) => {
               const color = clusters && getClusterColor 
                 ? getClusterColor(pattern.clusterIdx) 
                 : '#EAB308'; // Default amber

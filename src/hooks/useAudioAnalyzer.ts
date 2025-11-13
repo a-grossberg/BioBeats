@@ -87,7 +87,7 @@ export const useAudioAnalyzer = (audioSrc?: string): UseAudioAnalyzerReturn => {
         const analyze = () => {
           if (!analyserRef.current || !dataArrayRef.current) return;
 
-          analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+          analyserRef.current.getByteFrequencyData(dataArrayRef.current as any);
 
           // Calculate frequency bands
           const bassEnd = Math.floor(bufferLength * 0.1); // 0-10% = bass
@@ -300,7 +300,7 @@ export const useAudioAnalyzer = (audioSrc?: string): UseAudioAnalyzerReturn => {
       const analyze = () => {
         if (!analyserRef.current || !dataArrayRef.current) return;
 
-        analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+        analyserRef.current.getByteFrequencyData(dataArrayRef.current as any);
 
         const bassEnd = Math.floor(bufferLength * 0.1);
         const midEnd = Math.floor(bufferLength * 0.5);

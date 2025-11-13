@@ -6,7 +6,7 @@ import { calculateMusicalConcordance, MusicalConcordance } from '../utils/musica
 import { extractTraceFeatures, performPCA } from '../utils/pca';
 import { kMeans, suggestOptimalK, Cluster } from '../utils/clustering';
 import { initSeededRandom, hashDataset } from '../utils/seededRandom';
-import { assignInstrumentToCluster, createInstrument, getNoteFrequency, MAJOR_SCALE, calculateOscillationFrequency, calculateSynchronization } from './MusicalSonification';
+import { assignInstrumentToCluster, createInstrument, getNoteFrequency, MAJOR_SCALE } from './MusicalSonification';
 import * as Tone from 'tone';
 
 interface DatasetComparisonProps {
@@ -144,7 +144,8 @@ const DatasetComparison = ({ datasets, onDatasetCreated, shouldPause = 0 }: Data
         const instrument = createInstrument(instrumentType);
         
         // Add reverb
-        const reverb = new Tone.Reverb({ roomSize: 0.4, wet: 0.25 });
+        const reverb = new Tone.Reverb(0.4).toDestination();
+        reverb.wet.value = 0.25;
         instrument.connect(reverb);
         reverb.connect(gainNodeRef.current!);
         
@@ -165,7 +166,8 @@ const DatasetComparison = ({ datasets, onDatasetCreated, shouldPause = 0 }: Data
           const instrument = createInstrument(instrumentType);
           
           // Add reverb with slightly different settings to distinguish result
-          const reverb = new Tone.Reverb({ roomSize: 0.5, wet: 0.3 });
+          const reverb = new Tone.Reverb(0.5);
+          reverb.wet.value = 0.3;
           instrument.connect(reverb);
           reverb.connect(gainNodeRef.current!);
           

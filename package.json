@@ -1,5 +1,5 @@
 {
-  "name": "wavelet-calcium-sonification",
+  "name": "biobeats",
   "private": true,
   "version": "0.1.0",
   "type": "module",
@@ -10,7 +10,8 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "proxy": "node server/proxy.cjs",
     "preload": "node server/preload.cjs",
-    "preload:all": "node server/preload.cjs all"
+    "preload:all": "node server/preload.cjs all",
+    "netlify:dev": "netlify dev"
   },
   "dependencies": {
     "@types/three": "^0.181.0",

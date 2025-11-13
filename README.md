@@ -1,17 +1,20 @@
-# Wavelet - Calcium Imaging Sonification
+# BioBeats - Calcium Imaging Sonification
 
-An interactive web application that translates calcium imaging data into sound and music, exploring the relationship between biological oscillations and human aesthetic experience.
+An interactive web application that translates calcium imaging data into sound and music, exploring the relationship between biological oscillations and human aesthetic experience. Experience your neural data as a jukebox of biological rhythms.
 
 ## Features
 
 - **Real Data Integration**: Loads actual Neurofinder calcium imaging datasets (TIFF sequences)
 - **Interactive Sonification**: Each neuron is mapped to a musical note, with calcium intensity controlling volume
+- **Jukebox Interface**: Retro-inspired UI with neon effects and intuitive controls
 - **Multiple Visualization Modes**:
   - Individual calcium traces over time
   - Network activity heatmap
   - Population-level activity timeline
+  - Brain visualization with cluster coloring
 - **Dataset Comparison**: Compare multiple datasets side-by-side (e.g., disease vs. control, different brain regions)
 - **Real-time Playback**: Adjustable tempo, volume, and sonification modes (spike-triggered or continuous)
+- **Musical & Spike Modes**: Choose between musical sonification or spike-based audio representation
 
 ## Getting Started
 
@@ -26,6 +29,10 @@ An interactive web application that translates calcium imaging data into sound a
 npm install
 ```
 
+### Live Demo
+
+The app is deployed on Netlify with full functionality including dataset loading via serverless functions.
+
 ### Running the Application
 
 **Important:** You need TWO terminals running:
@@ -34,13 +41,13 @@ npm install
    ```bash
    npm run proxy
    ```
-   This must be running for the app to access datasets.
+   This must be running for the app to access datasets. The proxy server runs on port 3001.
 
 2. **Terminal 2 - Development Server**:
    ```bash
    npm run dev
    ```
-   The app will open at `http://localhost:3000`
+   The app will open at `http://localhost:5173` (or the next available port)
 
 ### Pre-loading Datasets (Recommended)
 
@@ -106,15 +113,17 @@ The app can download datasets on-demand, but this is slow (1GB+ per dataset):
 ### Loading Datasets
 
 1. **Select a Dataset**:
-   - Browse the available datasets in the selector
+   - Browse the available datasets in the selector (A1-A20 slots)
    - Click on a dataset card to load it
    - The app will automatically download and process the data
+   - You'll see a progress indicator during loading
 
 2. **Explore**:
    - Click play to hear the sonification
    - Adjust tempo and volume controls
-   - Switch between spike and continuous sonification modes
+   - Switch between spike and musical sonification modes
    - Load multiple datasets to compare them
+   - Use the VIEW toggle to switch between single and compare modes
 
 ### Dataset Format
 
@@ -135,7 +144,7 @@ If no regions file is provided, the app will auto-detect neurons using variance-
 
 ### Data Processing Pipeline
 
-1. **TIFF Loading**: Reads TIFF image sequences using the `geotiff` library
+1. **TIFF Loading**: Reads TIFF image sequences using the `geotiff` library (server-side processing)
 2. **ROI Extraction**: 
    - Uses ground truth regions if available
    - Otherwise auto-detects neurons by finding high-variance pixels
@@ -150,7 +159,7 @@ If no regions file is provided, the app will auto-detect neurons using variance-
 - **Timing**: Frame rate determines note timing (adjustable via tempo control)
 - **Modes**:
   - **Spike Mode**: Triggers notes on rising edges (when intensity crosses threshold)
-  - **Continuous Mode**: Sustains notes while intensity is above threshold
+  - **Musical Mode**: Continuous musical sonification with harmonies and rhythms
 
 ## Technical Stack
 
@@ -160,6 +169,16 @@ If no regions file is provided, the app will auto-detect neurons using variance-
 - **geotiff** for TIFF image parsing
 - **Tailwind CSS** for styling
 - **lucide-react** for icons
+- **Express** for proxy server
+
+## Data Handling
+
+Large `.tiff` files are excluded from version control (see `.gitignore`). Datasets are:
+- Downloaded on-demand from S3 via the proxy server
+- Cached locally in `data/cache/` (excluded from git)
+- Pre-loadable using `npm run preload`
+
+See [DATA_HANDLING.md](./DATA_HANDLING.md) for more details on managing data files.
 
 ## Dataset Sources
 
@@ -170,20 +189,62 @@ Datasets are from the [Neurofinder Benchmark](https://github.com/codeneuro/neuro
 - Jeff Zaremba, Patrick Kaifosh & Attila Losonczy / Columbia
 - Selmaan Chettih, Matthias Minderer, Chris Harvey / Harvard
 
+## Project Structure
+
+```
+BioBeats/
+├── src/
+│   ├── components/        # React components
+│   ├── hooks/            # Custom React hooks
+│   ├── utils/            # Utility functions
+│   └── types.ts          # TypeScript type definitions
+├── server/               # Proxy server for data access
+├── public/               # Static assets
+└── data/                 # Dataset cache (excluded from git)
+```
+
+## Deployment
+
+### Netlify (Recommended)
+
+The app is configured for Netlify deployment with serverless functions that replace the proxy server.
+
+**Quick Deploy:**
+
+1. **Via Netlify UI**:
+   - Go to [netlify.com](https://netlify.com) and sign in with GitHub
+   - Click "Add new site" → "Import an existing project"
+   - Select your `a-grossberg/BioBeats` repository
+   - Build settings are auto-detected from `netlify.toml`
+   - Click "Deploy site"
+
+2. **Via Netlify CLI**:
+   ```bash
+   npm install -g netlify-cli
+   netlify login
+   netlify deploy --prod
+   ```
+
+**How it works:**
+- Netlify serves the static React app
+- Netlify Functions (`netlify/functions/neurofinder.js`) handle dataset API requests
+- No separate proxy server needed - everything works out of the box!
+
+See [NETLIFY_DEPLOYMENT.md](./NETLIFY_DEPLOYMENT.md) for detailed instructions and troubleshooting.
+
 ## Future Enhancements
 
-- [ ] AI music generation integration (MusicGen, Magenta)
 - [ ] Export audio files
-- [ ] 3D visualization of network activity
 - [ ] Advanced ROI detection algorithms
 - [ ] Support for additional calcium imaging formats
 - [ ] Real-time streaming from imaging systems
+- [ ] Additional visualization modes
+- [ ] Deploy proxy server for production dataset access
 
 ## License
 
-MIT
+CC0-1.0
 
 ## Acknowledgments
 
-Built for exploring the intersection of neuroscience, data visualization, and music. Inspired by the oscillatory patterns of living neural networks.
-
+Built for exploring the intersection of neuroscience, data visualization, and music. Inspired by the oscillatory patterns of living neural networks and the aesthetic experience of biological rhythms.

@@ -99,11 +99,11 @@ export function createInstrument(type: 'piano' | 'bass' | 'strings' | 'flute' | 
           sustain: 0.6,
           release: 0.4
         },
-        filter: {
-          type: 'lowpass',
-          frequency: 300,
-          Q: 1
-        }
+        // filter: {
+        //   type: 'lowpass',
+        //   frequency: 300,
+        //   Q: 1
+        // }
       });
       break;
     
@@ -130,11 +130,11 @@ export function createInstrument(type: 'piano' | 'bass' | 'strings' | 'flute' | 
           sustain: 0.6,
           release: 0.5
         },
-        filter: {
-          type: 'lowpass',
-          frequency: 2000,
-          Q: 1
-        }
+        // filter: {
+        //   type: 'lowpass',
+        //   frequency: 2000,
+        //   Q: 1
+        // }
       });
       break;
     
@@ -148,11 +148,11 @@ export function createInstrument(type: 'piano' | 'bass' | 'strings' | 'flute' | 
           sustain: 0.1,
           release: 0.4
         },
-        filter: {
-          type: 'lowpass',
-          frequency: 2000,
-          Q: 2
-        }
+        // filter: {
+        //   type: 'lowpass',
+        //   frequency: 2000,
+        //   Q: 2
+        // }
       });
       break;
     
@@ -179,11 +179,11 @@ export function createInstrument(type: 'piano' | 'bass' | 'strings' | 'flute' | 
           sustain: 0,
           release: 0.2
         },
-        filter: {
-          type: 'lowpass',
-          frequency: 500,
-          Q: 3
-        }
+        // filter: {
+        //   type: 'lowpass',
+        //   frequency: 500,
+        //   Q: 3
+        // }
       });
       break;
     
@@ -197,11 +197,11 @@ export function createInstrument(type: 'piano' | 'bass' | 'strings' | 'flute' | 
           sustain: 0.7,
           release: 0.3
         },
-        filter: {
-          type: 'bandpass',
-          frequency: 1000,
-          Q: 2
-        }
+        // filter: {
+        //   type: 'bandpass',
+        //   frequency: 1000,
+        //   Q: 2
+        // }
       });
       break;
     
@@ -574,34 +574,43 @@ const MusicalSonification = ({ dataset, shouldPause = 0 }: MusicalSonificationPr
       
       switch (instrumentType) {
         case 'strings':
-          reverb = new Tone.Reverb({ roomSize: 0.8, wet: 0.4 });
+          reverb = new Tone.Reverb(0.8);
+          reverb.wet.value = 0.4;
           delay = new Tone.FeedbackDelay({ delayTime: '8n', feedback: 0.3, wet: 0.2 });
           break;
         case 'flute':
-          reverb = new Tone.Reverb({ roomSize: 0.5, wet: 0.3 });
+          reverb = new Tone.Reverb(0.5);
+          reverb.wet.value = 0.3;
           delay = new Tone.FeedbackDelay({ delayTime: '8n', feedback: 0.2, wet: 0.15 });
           break;
         case 'piano':
-          reverb = new Tone.Reverb({ roomSize: 0.4, wet: 0.25 });
+          reverb = new Tone.Reverb(0.4);
+          reverb.wet.value = 0.25;
           break;
         case 'bass':
-          reverb = new Tone.Reverb({ roomSize: 0.2, wet: 0.1 });
+          reverb = new Tone.Reverb(0.2);
+          reverb.wet.value = 0.1;
           break;
         case 'guitar':
-          reverb = new Tone.Reverb({ roomSize: 0.5, wet: 0.3 });
+          reverb = new Tone.Reverb(0.5);
+          reverb.wet.value = 0.3;
           break;
         case 'bell':
-          reverb = new Tone.Reverb({ roomSize: 0.7, wet: 0.4 });
+          reverb = new Tone.Reverb(0.7);
+          reverb.wet.value = 0.4;
           break;
         case 'drum':
-          reverb = new Tone.Reverb({ roomSize: 0.3, wet: 0.15 });
+          reverb = new Tone.Reverb(0.3);
+          reverb.wet.value = 0.15;
           break;
         case 'trumpet':
-          reverb = new Tone.Reverb({ roomSize: 0.4, wet: 0.25 });
+          reverb = new Tone.Reverb(0.4);
+          reverb.wet.value = 0.25;
           delay = new Tone.FeedbackDelay({ delayTime: '8n', feedback: 0.15, wet: 0.1 });
           break;
         default:
-          reverb = new Tone.Reverb({ roomSize: 0.3, wet: 0.2 });
+          reverb = new Tone.Reverb(0.3);
+          reverb.wet.value = 0.2;
       }
       
       // Connect: instrument -> delay (if exists) -> reverb -> gain -> destination
@@ -818,7 +827,8 @@ const MusicalSonification = ({ dataset, shouldPause = 0 }: MusicalSonificationPr
                   }
                 } catch (error) {
                   // Silently handle timing errors
-                  if (!error.message?.includes('Start time must be strictly greater')) {
+                  const errorMessage = error instanceof Error ? error.message : String(error);
+                  if (!errorMessage.includes('Start time must be strictly greater')) {
                     // Ignore
                   }
                 }
@@ -826,7 +836,8 @@ const MusicalSonification = ({ dataset, shouldPause = 0 }: MusicalSonificationPr
             });
           } catch (error) {
             // Silently handle errors
-            if (!error.message?.includes('Start time must be strictly greater')) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            if (!errorMessage.includes('Start time must be strictly greater')) {
               console.warn(`Error playing cluster ${cluster.id}:`, error);
             }
           }

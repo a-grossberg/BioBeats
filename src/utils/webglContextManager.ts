@@ -39,7 +39,7 @@ class WebGLContextManager {
     canvas.width = 36;
     canvas.height = 36;
     
-    const gl = canvas.getContext('webgl', {
+    const gl = (canvas.getContext('webgl', {
       alpha: true,
       premultipliedAlpha: false,
       antialias: false,
@@ -48,7 +48,7 @@ class WebGLContextManager {
     }) || canvas.getContext('experimental-webgl', {
       alpha: true,
       premultipliedAlpha: false
-    });
+    })) as WebGLRenderingContext | null;
 
     if (!gl) {
       console.warn('WebGL not supported');
