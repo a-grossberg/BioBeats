@@ -31,23 +31,30 @@ npm install
 
 ### Live Demo
 
-The app is deployed on Netlify with full functionality including dataset loading via serverless functions.
+The app is deployed on GitHub Pages at: `https://a-grossberg.github.io/BioBeats/`
+
+**Note**: For full functionality with all datasets, you'll need to prepare dataset files (see GITHUB_PAGES_SETUP.md). The app works with sample datasets that are included in the repository.
 
 ### Running the Application
 
-**Important:** You need TWO terminals running:
-
-1. **Terminal 1 - Proxy Server** (required):
+**Option 1: Development with Local Proxy** (for full dataset access):
+1. **Terminal 1 - Proxy Server**:
    ```bash
    npm run proxy
    ```
-   This must be running for the app to access datasets. The proxy server runs on port 3001.
+   This runs the proxy server on port 3001 to fetch datasets from S3.
 
 2. **Terminal 2 - Development Server**:
    ```bash
    npm run dev
    ```
-   The app will open at `http://localhost:5173` (or the next available port)
+   The app will open at `http://localhost:3000`
+
+**Option 2: Development with GitHub Pages** (simpler, uses pre-loaded datasets):
+```bash
+npm run dev
+```
+The app will try to load datasets from GitHub Pages. If datasets aren't available, it will fall back to the proxy if running.
 
 ### Pre-loading Datasets (Recommended)
 

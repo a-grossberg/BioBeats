@@ -6,13 +6,22 @@
 
 import { TIFFFrame, loadTIFFFile } from './tiffLoader';
 
-// Use Render proxy in production (if VITE_PROXY_URL is set), otherwise use Netlify Functions or local proxy
-const PROXY_BASE_URL = import.meta.env.VITE_PROXY_URL
-  ? `${import.meta.env.VITE_PROXY_URL}/api/neurofinder`  // Render or other external proxy
-  : '/api/neurofinder'; // Netlify Functions or local dev proxy
+// Use GitHub Pages for datasets (free hosting)
+// In production, fetch from GitHub Pages. In dev, can use local proxy or GitHub Pages
+const getBaseUrl = () => {
+  if (import.meta.env.PROD) {
+    // GitHub Pages base path
+    return '/BioBeats';
+  }
+  // For local dev, try GitHub Pages first, fallback to proxy
+  return '';
+};
+
+const DATASETS_BASE_URL = `${getBaseUrl()}/datasets`;
+const PROXY_BASE_URL = '/api/neurofinder'; // For local dev proxy server
 
 /**
- * Fetch dataset using proxy (recommended)
+ * Fetch dataset using proxy (for local development)
  * This assumes you have a backend proxy that fetches from S3
  */
 export async function fetchDatasetViaProxy(
@@ -308,27 +317,93 @@ function extractFrameNumber(filename: string): number {
 }
 
 /**
+ * Fetch dataset from GitHub Pages
+ */
+export async function fetchDatasetFromGitHubPages(
+  datasetId: string,
+  onProgress?: (progress: number, message: string) => void
+): Promise<{ frames: TIFFFrame[]; regions?: any }> {
+  onProgress?.(0, 'Loading dataset from GitHub Pages...');
+  
+  try {
+    // Load manifest
+    const manifestUrl = `${DATASETS_BASE_URL}/${datasetId}.json`;
+    onProgress?.(10, 'Fetching dataset manifest...');
+    
+    const manifestResponse = await fetch(manifestUrl);
+    if (!manifestResponse.ok) {
+      throw new Error(`Dataset manifest not found: ${datasetId}`);
+    }
+    
+    const manifest = await manifestResponse.json();
+    onProgress?.(20, `Found ${manifest.frameCount} frames`);
+    
+    // Load frames (limit to available frames)
+    const frames: TIFFFrame[] = [];
+    const framesToLoad = manifest.frames || [];
+    const totalFrames = framesToLoad.length;
+    
+    for (let i = 0; i < totalFrames; i++) {
+      const frameInfo = framesToLoad[i];
+      const progress = 20 + Math.floor((i / totalFrames) * 70);
+      onProgress?.(progress, `Loading frame ${i + 1}/${totalFrames}...`);
+      
+      try {
+        const imageUrl = `${DATASETS_BASE_URL}/${datasetId}/images/${frameInfo.filename}`;
+        const imageResponse = await fetch(imageUrl);
+        
+        if (imageResponse.ok) {
+          const blob = await imageResponse.blob();
+          const file = new File([blob], frameInfo.filename, { type: 'image/tiff' });
+          const frame = await loadTIFFFile(file);
+          
+          if (frame) {
+            frame.frameIndex = i;
+            frames.push(frame);
+          }
+        }
+      } catch (frameError) {
+        console.warn(`Failed to load frame ${i}:`, frameError);
+        // Continue loading other frames
+      }
+    }
+    
+    if (frames.length === 0) {
+      throw new Error('No frames could be loaded from GitHub Pages');
+    }
+    
+    onProgress?.(95, 'Dataset loaded successfully!');
+    
+    return {
+      frames,
+      regions: manifest.regions || null
+    };
+  } catch (error) {
+    throw new Error(`Failed to load dataset from GitHub Pages: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+}
+
+/**
  * Try to fetch dataset, falling back to different methods
  */
 export async function fetchDataset(
   datasetId: string,
   onProgress?: (progress: number, message: string) => void
 ): Promise<{ frames: TIFFFrame[]; regions?: any }> {
-  // Try proxy first
+  // Try GitHub Pages first (free hosting)
   try {
-    return await fetchDatasetViaProxy(datasetId, onProgress);
-  } catch (error) {
-    console.warn('Proxy fetch failed, trying direct S3...', error);
-    
-    // Fallback: try direct (will likely fail due to CORS)
+    return await fetchDatasetFromGitHubPages(datasetId, onProgress);
+  } catch (githubError) {
+    console.warn('GitHub Pages fetch failed, trying proxy...', githubError);
+    // Fallback to proxy if available (for local dev)
     try {
-      return await fetchDatasetDirect();
-    } catch (directError) {
+      return await fetchDatasetViaProxy(datasetId, onProgress);
+    } catch (proxyError) {
       throw new Error(
         `Failed to load dataset. Please ensure:\n` +
-        `1. A proxy server is running at ${PROXY_BASE_URL}\n` +
-        `2. Or CORS is enabled on the S3 bucket\n\n` +
-        `Error: ${error instanceof Error ? error.message : 'Unknown error'}`
+        `1. Dataset files are available at ${DATASETS_BASE_URL}/${datasetId}.json\n` +
+        `2. Or a proxy server is running\n\n` +
+        `Error: ${githubError instanceof Error ? githubError.message : 'Unknown error'}`
       );
     }
   }
