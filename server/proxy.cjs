@@ -12,9 +12,10 @@ const express = require('express');
 const cors = require('cors');
 const https = require('https');
 const http = require('http');
-const { createWriteStream, existsSync, readdirSync, mkdirSync, statSync, readFileSync } = require('fs');
+const { createWriteStream, existsSync, readdirSync, mkdirSync, statSync, readFileSync, createReadStream } = require('fs');
 const { join, dirname, resolve } = require('path');
-const AdmZip = require('adm-zip');
+const yauzl = require('yauzl');
+const { pipeline } = require('stream/promises');
 
 // Try to load geotiff for server-side processing (optional, won't break if not available)
 let geotiff = null;
@@ -208,9 +209,9 @@ async function downloadAndExtractZip(datasetId, onProgress) {
     }
   }
   
-  // Extract ZIP
+  // Extract ZIP using streaming (memory-efficient)
   console.log(`Extracting ${datasetId}.zip...`);
-  onProgress?.(85, 'Extracting ZIP file...');
+  onProgress?.(85, 'Extracting ZIP file (this may take a few minutes)...');
   
   // Verify ZIP file is complete before extracting
   const fs = require('fs');
@@ -220,9 +221,96 @@ async function downloadAndExtractZip(datasetId, onProgress) {
   }
   
   try {
-    const zip = new AdmZip(zipPath);
-    zip.extractAllTo(extractPath, true);
-    onProgress?.(95, 'Extraction complete, verifying...');
+    // Use yauzl for streaming extraction (memory-efficient)
+    // This processes files one at a time without loading the entire ZIP into memory
+    await new Promise((resolve, reject) => {
+      yauzl.open(zipPath, { lazyEntries: true }, (err, zipfile) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        
+        let extractedCount = 0;
+        let isProcessing = false;
+        let hasError = false;
+        
+        const processNextEntry = () => {
+          if (hasError || isProcessing) return;
+          isProcessing = true;
+          zipfile.readEntry();
+        };
+        
+        zipfile.on('entry', (entry) => {
+          if (hasError) return;
+          
+          if (/\/$/.test(entry.fileName)) {
+            // Directory entry - create it
+            const dirPath = join(extractPath, entry.fileName);
+            if (!existsSync(dirPath)) {
+              mkdirSync(dirPath, { recursive: true });
+            }
+            isProcessing = false;
+            processNextEntry();
+          } else {
+            // File entry - extract it (sequentially to save memory)
+            zipfile.openReadStream(entry, (err3, readStream) => {
+              if (hasError) return;
+              if (err3) {
+                hasError = true;
+                reject(err3);
+                return;
+              }
+              
+              const filePath = join(extractPath, entry.fileName);
+              const dirPath = dirname(filePath);
+              if (!existsSync(dirPath)) {
+                mkdirSync(dirPath, { recursive: true });
+              }
+              
+              const writeStream = createWriteStream(filePath);
+              
+              pipeline(readStream, writeStream)
+                .then(() => {
+                  if (hasError) return;
+                  extractedCount++;
+                  // Update progress every 10 files or on every file for small datasets
+                  if (extractedCount % 10 === 0 || extractedCount < 20) {
+                    onProgress?.(85 + Math.min(9, Math.floor((extractedCount / 100) * 10)), `Extracting: ${extractedCount} files...`);
+                  }
+                  isProcessing = false;
+                  processNextEntry();
+                })
+                .catch((pipeErr) => {
+                  hasError = true;
+                  reject(pipeErr);
+                });
+            });
+          }
+        });
+        
+        zipfile.on('end', () => {
+          if (hasError) return;
+          // All entries read, wait for final extraction to complete
+          const checkComplete = () => {
+            if (!isProcessing) {
+              onProgress?.(95, 'Extraction complete, verifying...');
+              resolve();
+            } else {
+              setTimeout(checkComplete, 100);
+            }
+          };
+          checkComplete();
+        });
+        
+        zipfile.on('error', (zipErr) => {
+          hasError = true;
+          reject(zipErr);
+        });
+        
+        // Start processing
+        processNextEntry();
+      });
+    });
   } catch (zipError) {
     // If extraction fails, the ZIP might be corrupted or incomplete
     // Delete it and throw error

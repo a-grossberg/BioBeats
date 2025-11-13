@@ -40,9 +40,9 @@ Update the app to use this URL:
 ## Free Tier Limitations
 
 - **Spins down after 15 minutes** of inactivity
-- First request after spin-down takes ~30 seconds (cold start)
+- First request after spin-down takes ~30-50 seconds (cold start)
 - **750 hours/month** free (enough for ~24/7 if you keep it active)
-- **512MB RAM** (should be enough for the proxy)
+- **512MB RAM** - The proxy uses streaming ZIP extraction to stay within this limit
 
 ## Tips
 

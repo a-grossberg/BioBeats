@@ -6,11 +6,7 @@
 
 import { TIFFFrame, loadTIFFFile } from './tiffLoader';
 
-// Use Render proxy in production (if VITE_PROXY_URL is set), otherwise try Netlify Functions
-// Local dev uses Vite proxy to localhost:3001
-const PROXY_BASE_URL = import.meta.env.VITE_PROXY_URL 
-  ? `${import.meta.env.VITE_PROXY_URL}/api/neurofinder`  // Render or other external proxy
-  : '/api/neurofinder'; // Netlify Functions or local dev proxy
+const PROXY_BASE_URL = '/api/neurofinder'; // For local proxy server
 
 /**
  * Fetch dataset using proxy (recommended)
@@ -24,61 +20,31 @@ export async function fetchDatasetViaProxy(
 
   try {
     // First, check if proxy is available with timeout
-    // Render free tier can have 30+ second cold starts, so use longer timeout
     try {
       const controller = new AbortController();
-      const timeoutDuration = import.meta.env.VITE_PROXY_URL ? 45000 : 2000; // 45s for Render, 2s for local
-      const timeoutId = setTimeout(() => controller.abort(), timeoutDuration);
+      const timeoutId = setTimeout(() => controller.abort(), 2000); // 2 second timeout
       
       const statusCheck = await fetch(`${PROXY_BASE_URL}/${datasetId}/status`, { 
-        signal: controller.signal,
-        method: 'GET',
-        mode: 'cors',
-        headers: {
-          'Accept': 'application/json',
-        }
+        signal: controller.signal
       });
       clearTimeout(timeoutId);
       
       if (!statusCheck.ok && statusCheck.status !== 404) {
-        // On Netlify, this means the function might be having issues
-        if (import.meta.env.PROD) {
-          throw new Error('Dataset service is not available. Please try again in a moment.');
-        } else {
-          throw new Error('Proxy server is not responding. Make sure it is running on port 3001.');
-        }
+        throw new Error('Proxy server is not responding. Make sure it is running on port 3001.');
       }
     } catch (fetchError) {
       if (fetchError instanceof Error && (fetchError.name === 'AbortError' || fetchError.message.includes('aborted'))) {
-        if (import.meta.env.VITE_PROXY_URL) {
-          throw new Error('Render service is starting up (cold start). This can take 30-50 seconds on the free tier. Please wait and try again.');
-        } else if (import.meta.env.PROD) {
-          throw new Error('Dataset service timeout. Large datasets may take longer to process. Please try again.');
-        } else {
-          throw new Error('Proxy server timeout. Make sure the proxy is running: `npm run proxy`');
-        }
+        throw new Error('Proxy server timeout. Make sure the proxy is running: `npm run proxy`');
       }
       if (fetchError instanceof TypeError) {
-        if (import.meta.env.VITE_PROXY_URL) {
-          throw new Error('Cannot connect to Render service. It may be spinning up (free tier cold start takes 30-50 seconds). Please wait and refresh.');
-        } else if (import.meta.env.PROD) {
-          throw new Error('Cannot connect to dataset service. Please refresh and try again.');
-        } else {
-          throw new Error('Cannot connect to proxy server. Make sure it is running: `npm run proxy`');
-        }
+        throw new Error('Cannot connect to proxy server. Make sure it is running: `npm run proxy`');
       }
       throw fetchError;
     }
 
     // Trigger the download/extraction by requesting info
     // This will start the process if not already started
-    const infoResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/info.json`, {
-      method: 'GET',
-      mode: 'cors',
-      headers: {
-        'Accept': 'application/json',
-      }
-    });
+    const infoResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/info.json`);
     if (!infoResponse.ok) {
       const errorText = await infoResponse.text();
       let errorMessage = 'Dataset not found or proxy not available';
@@ -99,13 +65,7 @@ export async function fetchDatasetViaProxy(
     while (!ready && attempts < maxAttempts) {
       await new Promise(resolve => setTimeout(resolve, 500)); // Wait 500ms between checks
       
-      const statusResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/status`, {
-        method: 'GET',
-        mode: 'cors',
-        headers: {
-          'Accept': 'application/json',
-        }
-      });
+      const statusResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/status`);
       if (statusResponse.ok) {
         const status = await statusResponse.json();
         
@@ -128,13 +88,7 @@ export async function fetchDatasetViaProxy(
     }
 
     // Now fetch the actual info
-    const finalInfoResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/info.json`, {
-      method: 'GET',
-      mode: 'cors',
-      headers: {
-        'Accept': 'application/json',
-      }
-    });
+    const finalInfoResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/info.json`);
     const info = await finalInfoResponse.json();
     const frameCount = info.frameCount || 100; // Default estimate
 
@@ -150,13 +104,7 @@ export async function fetchDatasetViaProxy(
         // Try server-side processing first
         let useServerSideProcessing = true;
         try {
-          const testResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/frames/0/processed.json`, {
-            method: 'GET',
-            mode: 'cors',
-            headers: {
-              'Accept': 'application/json',
-            }
-          });
+          const testResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/frames/0/processed.json`);
           if (!testResponse.ok) {
             useServerSideProcessing = false;
             console.log('Server-side processing not available, falling back to client-side');
@@ -173,13 +121,7 @@ export async function fetchDatasetViaProxy(
             for (let j = 0; j < batchSize && (i + j) < maxFramesToLoad; j++) {
               const frameNum = i + j;
               batch.push(
-                fetch(`${PROXY_BASE_URL}/${datasetId}/frames/${frameNum}/processed.json`, {
-                  method: 'GET',
-                  mode: 'cors',
-                  headers: {
-                    'Accept': 'application/json',
-                  }
-                })
+                fetch(`${PROXY_BASE_URL}/${datasetId}/frames/${frameNum}/processed.json`)
                   .then(res => {
                     if (!res.ok) throw new Error(`Failed to fetch frame ${frameNum}: ${res.statusText}`);
                     return res.json();
@@ -229,10 +171,7 @@ export async function fetchDatasetViaProxy(
               // Try each naming pattern
               const fetchPromises = framePatterns.map(pattern => {
                 const filename = pattern(frameNum);
-                return fetch(`${PROXY_BASE_URL}/${datasetId}/images/${filename}`, {
-                  method: 'GET',
-                  mode: 'cors',
-                })
+                return fetch(`${PROXY_BASE_URL}/${datasetId}/images/${filename}`)
                   .then(res => {
                     if (res.ok) return res.blob();
                     return null; // Try next pattern
@@ -296,13 +235,7 @@ export async function fetchDatasetViaProxy(
     // Fetch regions if available
     let regions = null;
     try {
-      const regionsResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/regions.json`, {
-        method: 'GET',
-        mode: 'cors',
-        headers: {
-          'Accept': 'application/json',
-        }
-      });
+      const regionsResponse = await fetch(`${PROXY_BASE_URL}/${datasetId}/regions.json`);
       if (regionsResponse.ok) {
         regions = await regionsResponse.json();
       }
