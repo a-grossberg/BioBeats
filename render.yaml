@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: biobeats-proxy
+    env: node
+    buildCommand: npm install
+    startCommand: node server/proxy.cjs
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000
+

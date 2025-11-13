@@ -6,10 +6,11 @@
 
 import { TIFFFrame, loadTIFFFile } from './tiffLoader';
 
-// Use Netlify Functions in production, local proxy in development
-const PROXY_BASE_URL = import.meta.env.PROD 
-  ? '/api/neurofinder'  // Netlify redirects this to /.netlify/functions/neurofinder
-  : '/api/neurofinder'; // Local dev uses Vite proxy to localhost:3001
+// Use Render proxy in production (if VITE_PROXY_URL is set), otherwise try Netlify Functions
+// Local dev uses Vite proxy to localhost:3001
+const PROXY_BASE_URL = import.meta.env.VITE_PROXY_URL 
+  ? `${import.meta.env.VITE_PROXY_URL}/api/neurofinder`  // Render or other external proxy
+  : '/api/neurofinder'; // Netlify Functions or local dev proxy
 
 /**
  * Fetch dataset using proxy (recommended)
