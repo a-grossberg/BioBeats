@@ -57,7 +57,7 @@ function LandingPage({ onEnter, onNavigateToLanding }: LandingPageProps) {
                 transform: 'scale(0.75)'
               }}
             >
-              <source src="/landing-video.mp4" type="video/mp4" />
+              <source src={`${import.meta.env.BASE_URL}landing-video.mp4`} type="video/mp4" />
               Your browser does not support the video tag.
             </video>
             {/* Gradient fade at edges for better blend */}
