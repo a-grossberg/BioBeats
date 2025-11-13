@@ -20,6 +20,7 @@ export interface DatasetInfo {
   organism?: string;
   lab?: string;
   location?: string;
+  institution?: string;
   indicator?: string;
   rateHz?: number;
   dimensions?: number[];

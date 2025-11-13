@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Music, GitCompare } from 'lucide-react';
 import { fetchDataset } from './utils/neurofinderFetcher';
 import { framesToCalciumDataset } from './utils/calciumExtraction';
+import { mergeDatasetMetadata } from './utils/loadDatasetMetadata';
 import { CalciumDataset } from './types';
 import { DatasetInfo } from './utils/datasetLoader';
 import CalciumSonification from './components/CalciumSonification';
@@ -17,6 +18,7 @@ function App() {
   const [showAbout, setShowAbout] = useState(false);
   const [datasets, setDatasets] = useState<CalciumDataset[]>([]);
   const [activeDatasetIndex, setActiveDatasetIndex] = useState<number | null>(null);
+  const [datasetMetadata, setDatasetMetadata] = useState<Map<string, DatasetInfo>>(new Map());
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'single' | 'compare'>('single');
@@ -104,19 +106,29 @@ function App() {
 
     try {
       // Fetch the dataset
-      const { frames, regions } = await fetchDataset(
+      const { frames, regions, metadata } = await fetchDataset(
         datasetInfo.id,
         (value, message) => setProgress({ value, message })
       );
+
+      // Merge metadata from ZIP with hardcoded info (metadata takes precedence)
+      const mergedInfo = mergeDatasetMetadata(datasetInfo, metadata || null);
+      
+      // Store merged metadata for display
+      setDatasetMetadata(prev => {
+        const updated = new Map(prev);
+        updated.set(datasetInfo.id, mergedInfo);
+        return updated;
+      });
 
       // Convert to calcium dataset
       const dataset = await framesToCalciumDataset(
         frames,
         regions,
         {
-          datasetName: datasetInfo.name,
-          region: datasetInfo.region,
-          condition: datasetInfo.condition
+          datasetName: mergedInfo.name,
+          region: mergedInfo.region,
+          condition: mergedInfo.condition
         }
       );
 
@@ -169,6 +181,7 @@ function App() {
               onDatasetSelect={handleDatasetSelect}
               isLoading={isLoading}
               loadedDatasets={loadedDatasetIds}
+              datasetMetadata={datasetMetadata}
             />
           </div>
 

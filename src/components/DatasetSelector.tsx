@@ -6,10 +6,16 @@ interface DatasetSelectorProps {
   onDatasetSelect: (dataset: DatasetInfo) => void;
   isLoading: boolean;
   loadedDatasets: string[];
+  datasetMetadata?: Map<string, DatasetInfo>; // Updated metadata from ZIP files
 }
 
-const DatasetSelector = ({ onDatasetSelect, isLoading, loadedDatasets }: DatasetSelectorProps) => {
+const DatasetSelector = ({ onDatasetSelect, isLoading, loadedDatasets, datasetMetadata }: DatasetSelectorProps) => {
   const [selectedDataset, setSelectedDataset] = useState<string | null>(null);
+  
+  // Helper to get dataset info (use merged metadata if available, otherwise use hardcoded)
+  const getDatasetInfo = (dataset: DatasetInfo): DatasetInfo => {
+    return datasetMetadata?.get(dataset.id) || dataset;
+  };
   
   // Create 20 slots (10 per side) to match the jukebox design
   // Note: There are 19 training datasets available from Neurofinder, so one slot will be empty
@@ -64,6 +70,9 @@ const DatasetSelector = ({ onDatasetSelect, isLoading, loadedDatasets }: Dataset
                 const isSelected = selectedDataset === dataset.id;
                 const isCurrentlyLoading = isLoading && isSelected;
                 
+                // Use merged metadata if available (call once to avoid repeated lookups)
+                const displayDataset = getDatasetInfo(dataset);
+                
                 return (
                   <div 
                     key={dataset.id} 
@@ -83,19 +92,25 @@ const DatasetSelector = ({ onDatasetSelect, isLoading, loadedDatasets }: Dataset
                       <div className="flex-1 min-w-0">
                         <div className={`text-sm font-bold truncate mb-1 ${
                           isSelected ? 'text-amber-200' : 'text-amber-300/90'
-                        }`} style={{ fontFamily: 'Bebas Neue, sans-serif', letterSpacing: '0.05em' }}>{dataset.name}</div>
-                        {dataset.lab && (
-                          <div className="text-xs text-amber-300/70 truncate mb-0.5" style={{ fontFamily: 'Orbitron, sans-serif' }}>{dataset.lab}</div>
-                        )}
-                        {dataset.region && (
-                          <div className="text-xs text-amber-300/70 truncate mb-0.5" style={{ fontFamily: 'Orbitron, sans-serif' }}>{dataset.region}</div>
-                        )}
-                        {dataset.organism && (
-                          <div className="text-xs text-amber-300/50 mb-0.5" style={{ fontFamily: 'Orbitron, sans-serif' }}>{dataset.organism}</div>
-                        )}
-                        {dataset.frameCount && (
-                          <div className="text-xs text-amber-300/50" style={{ fontFamily: 'Orbitron, sans-serif' }}>🎬 {dataset.frameCount.toLocaleString()} frames</div>
-                        )}
+                        }`} style={{ fontFamily: 'Bebas Neue, sans-serif', letterSpacing: '0.05em' }}>{displayDataset.name}</div>
+                        <div className="text-xs text-amber-300/70 truncate mb-0.5" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                          {displayDataset.lab || 'Unknown'}
+                        </div>
+                        <div className="text-xs text-amber-300/70 truncate mb-0.5" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                          {displayDataset.institution || displayDataset.location || 'Unknown'}
+                        </div>
+                        <div className="text-xs text-amber-300/70 truncate mb-0.5" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                          {displayDataset.region || 'Unknown'}
+                        </div>
+                        <div className="text-xs text-amber-300/50 mb-0.5" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                          {displayDataset.organism || 'Unknown'}
+                        </div>
+                        <div className="text-xs text-amber-300/50 mb-0.5" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                          {displayDataset.indicator || 'Unknown'}
+                        </div>
+                        <div className="text-xs text-amber-300/50" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                          🎬 {displayDataset.frameCount ? displayDataset.frameCount.toLocaleString() : 'Unknown'} frames
+                        </div>
                       </div>
                       <div className="flex items-center gap-1 ml-1 flex-shrink-0">
                         {isCurrentlyLoading && (
@@ -252,6 +267,9 @@ const DatasetSelector = ({ onDatasetSelect, isLoading, loadedDatasets }: Dataset
                 const isSelected = selectedDataset === dataset.id;
                 const isCurrentlyLoading = isLoading && isSelected;
                 
+                // Use merged metadata if available (call once to avoid repeated lookups)
+                const displayDataset = getDatasetInfo(dataset);
+                
                 return (
                   <div 
                     key={dataset.id} 
@@ -271,19 +289,25 @@ const DatasetSelector = ({ onDatasetSelect, isLoading, loadedDatasets }: Dataset
                       <div className="flex-1 min-w-0">
                         <div className={`text-sm font-bold truncate mb-1 ${
                           isSelected ? 'text-amber-200' : 'text-amber-300/90'
-                        }`} style={{ fontFamily: 'Bebas Neue, sans-serif', letterSpacing: '0.05em' }}>{dataset.name}</div>
-                        {dataset.lab && (
-                          <div className="text-xs text-amber-300/70 truncate mb-0.5" style={{ fontFamily: 'Orbitron, sans-serif' }}>{dataset.lab}</div>
-                        )}
-                        {dataset.region && (
-                          <div className="text-xs text-amber-300/70 truncate mb-0.5" style={{ fontFamily: 'Orbitron, sans-serif' }}>{dataset.region}</div>
-                        )}
-                        {dataset.organism && (
-                          <div className="text-xs text-amber-300/50 mb-0.5" style={{ fontFamily: 'Orbitron, sans-serif' }}>{dataset.organism}</div>
-                        )}
-                        {dataset.frameCount && (
-                          <div className="text-xs text-amber-300/50" style={{ fontFamily: 'Orbitron, sans-serif' }}>🎬 {dataset.frameCount.toLocaleString()} frames</div>
-                        )}
+                        }`} style={{ fontFamily: 'Bebas Neue, sans-serif', letterSpacing: '0.05em' }}>{displayDataset.name}</div>
+                        <div className="text-xs text-amber-300/70 truncate mb-0.5" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                          {displayDataset.lab || 'Unknown'}
+                        </div>
+                        <div className="text-xs text-amber-300/70 truncate mb-0.5" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                          {displayDataset.institution || displayDataset.location || 'Unknown'}
+                        </div>
+                        <div className="text-xs text-amber-300/70 truncate mb-0.5" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                          {displayDataset.region || 'Unknown'}
+                        </div>
+                        <div className="text-xs text-amber-300/50 mb-0.5" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                          {displayDataset.organism || 'Unknown'}
+                        </div>
+                        <div className="text-xs text-amber-300/50 mb-0.5" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                          {displayDataset.indicator || 'Unknown'}
+                        </div>
+                        <div className="text-xs text-amber-300/50" style={{ fontFamily: 'Orbitron, sans-serif' }}>
+                          🎬 {displayDataset.frameCount ? displayDataset.frameCount.toLocaleString() : 'Unknown'} frames
+                        </div>
                       </div>
                       <div className="flex items-center gap-1 ml-1 flex-shrink-0">
                         {isCurrentlyLoading && (

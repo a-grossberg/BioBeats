@@ -6,6 +6,26 @@
 
 import { TIFFFrame, loadTIFFFile } from './tiffLoader';
 
+export interface DatasetMetadata {
+  lab?: string;
+  source?: string;
+  contributor?: string;
+  location?: string;
+  institution?: string;
+  region?: string;
+  brain_region?: string;
+  organism?: string;
+  species?: string;
+  indicator?: string;
+  fluorophore?: string;
+  rateHz?: number;
+  fps?: number;
+  frequency?: number;
+  frameCount?: number;
+  dimensions?: number[];
+  [key: string]: any;
+}
+
 // S3 bucket base URL for Neurofinder datasets (ZIP files only)
 const NEUROFINDER_S3_BASE = 'https://s3.amazonaws.com/neuro.datasets/challenges/neurofinder';
 
@@ -30,7 +50,7 @@ const PROXY_BASE_URL = '/api/neurofinder'; // For local dev proxy server
 export async function fetchDatasetViaProxy(
   datasetId: string,
   onProgress?: (progress: number, message: string) => void
-): Promise<{ frames: TIFFFrame[]; regions?: any }> {
+): Promise<{ frames: TIFFFrame[]; regions?: any; metadata?: DatasetMetadata }> {
   onProgress?.(0, 'Checking dataset status...');
 
   try {
@@ -371,7 +391,7 @@ async function getDatasetInfo(datasetId: string): Promise<{ frameCount: number; 
 export async function fetchDatasetFromS3(
   datasetId: string,
   onProgress?: (progress: number, message: string) => void
-): Promise<{ frames: TIFFFrame[]; regions?: any }> {
+): Promise<{ frames: TIFFFrame[]; regions?: any; metadata?: DatasetMetadata }> {
   onProgress?.(0, 'Downloading dataset ZIP from S3...');
   
   try {
@@ -465,6 +485,35 @@ export async function fetchDatasetFromS3(
       // Regions not found, use existing or null
     }
     
+    // Try to find metadata files in ZIP (info.json, metadata.json, README, etc.)
+    let metadata: any = null;
+    try {
+      const metadataFiles = [
+        zip.file(/info\.json$/i)[0],
+        zip.file(/metadata\.json$/i)[0],
+        zip.file(/README/i)[0],
+        zip.file(/readme/i)[0]
+      ].filter(f => f);
+      
+      for (const metadataFile of metadataFiles) {
+        try {
+          const metadataText = await metadataFile.async('string');
+          if (metadataFile.name.toLowerCase().endsWith('.json')) {
+            metadata = JSON.parse(metadataText);
+            break;
+          } else if (metadataFile.name.toLowerCase().includes('readme')) {
+            // Try to parse README for metadata
+            // This is a fallback - actual metadata should be in JSON
+            break;
+          }
+        } catch (e) {
+          continue;
+        }
+      }
+    } catch (e) {
+      // Metadata not found, that's okay
+    }
+    
     if (frames.length === 0) {
       throw new Error('No frames could be extracted from ZIP');
     }
@@ -473,7 +522,8 @@ export async function fetchDatasetFromS3(
     
     return {
       frames,
-      regions: regionsData
+      regions: regionsData,
+      metadata: metadata // Include metadata if found
     };
   } catch (error) {
     throw new Error(`Failed to load dataset from S3: ${error instanceof Error ? error.message : 'Unknown error'}`);
@@ -486,7 +536,7 @@ export async function fetchDatasetFromS3(
 export async function fetchDataset(
   datasetId: string,
   onProgress?: (progress: number, message: string) => void
-): Promise<{ frames: TIFFFrame[]; regions?: any }> {
+): Promise<{ frames: TIFFFrame[]; regions?: any; metadata?: DatasetMetadata }> {
   // Try direct S3 access first (streaming, no download needed)
   try {
     return await fetchDatasetFromS3(datasetId, onProgress);
